@@ -651,62 +651,85 @@ end)
 local isAutoUpgradeBrainrots = createOption("Auto Upgrade Brainrots", false, "Main", function(active)
     if active then
         task.spawn(function()
-            local Plots = workspace:WaitForChild("Plots")
-            local UpgradeRemote = ReplicatedStorage:WaitForChild("Events"):WaitForChild("UpgradeBrainrot")
-            local upgradeCooldown = {}
-            
-            while optionStates["Auto Upgrade Brainrots"] do
-                task.wait(0.2)
-                pcall(function()
-                    local function getCash()
-                        local stats = Player:FindFirstChild("leaderstats")
-                        if stats then
-                            local cash = stats:FindFirstChild("Cash")
-                            if cash then return cash.Value end
-                        end
-                        return 0
+            local Players = game:GetService("Players")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local MarketplaceService = game:GetService("MarketplaceService")
+
+            local Player = Players.LocalPlayer
+            local PlayerGui = Player:WaitForChild("PlayerGui")
+            local PlotsFolder = workspace:WaitForChild("Plots")
+
+            local Events = ReplicatedStorage:WaitForChild("Events")
+            local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
+
+            local UpgradeEvent = Events:WaitForChild("UpgradeBrainrot")
+            local UpgradeFunction = Remotes and Remotes:FindFirstChild("UpgradeBrainrot")
+
+            local function getMyPlot()
+                for _, plot in ipairs(PlotsFolder:GetChildren()) do
+                    if plot:GetAttribute("Owner") == Player.UserId then
+                        return plot
                     end
-                    
-                    local function safeNumber(text)
-                        if not text then return 0 end
-                        text = tostring(text):gsub("[^%d.]", "")
-                        if text == "" then return 0 end
-                        return tonumber(text) or 0
-                    end
-                    
-                    for _, plot in ipairs(Plots:GetChildren()) do
-                        if plot:GetAttribute("Owner") == Player.UserId then
-                            local PlotSlots = plot:FindFirstChild("PlotSlots")
-                            if PlotSlots then
-                                for _, slot in ipairs(PlotSlots:GetChildren()) do
-                                    if slot:IsA("Model") then
-                                        local UpgradePart = slot:FindFirstChild("UpgradePart")
-                                        if UpgradePart then
-                                            local SurfaceGui = UpgradePart:FindFirstChild("UpgradeSurfaceGui")
-                                            if SurfaceGui then
-                                                local TextLabel = SurfaceGui:FindFirstChild("TextLabel", true)
-                                                if TextLabel and TextLabel.Text then
-                                                    local price = safeNumber(TextLabel.Text)
-                                                    local cash = getCash()
-                                                    
-                                                    if price > 0 and cash >= price then
-                                                        if not upgradeCooldown[slot] or tick() - upgradeCooldown[slot] >= 0.5 then
-                                                            upgradeCooldown[slot] = tick()
-                                                            
-                                                            pcall(function()
-                                                                UpgradeRemote:FireServer(plot.Name, slot.Name)
-                                                            end)
-                                                        end
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
+                end
+                return nil
+            end
+
+            local function getSlots(plot)
+                local result = {}
+                local folder = plot:FindFirstChild("PlotSlots")
+                if not folder then return result end
+
+                for _, slot in ipairs(folder:GetChildren()) do
+                    if slot:IsA("Model") and tonumber(slot.Name) then
+                        local part = slot:FindFirstChild("UpgradePart")
+                        if part then
+                            table.insert(result, slot)
                         end
                     end
+                end
+
+                table.sort(result, function(a, b)
+                    return tonumber(a.Name) < tonumber(b.Name)
                 end)
+
+                return result
+            end
+
+            local function hidePurchaseGui()
+                local gui = PlayerGui:FindFirstChild("PromptPurchaseGui")
+                if gui and gui:FindFirstChild("Frame") then
+                    gui.Frame.Visible = false
+                end
+            end
+
+            local function upgrade(plotName, slotName)
+                pcall(function()
+                    UpgradeEvent:FireServer(plotName, tostring(slotName))
+                end)
+
+                if UpgradeFunction then
+                    pcall(function()
+                        UpgradeFunction:InvokeServer(plotName, tostring(slotName))
+                    end)
+                end
+            end
+
+            while optionStates["Auto Upgrade Brainrots"] do
+                hidePurchaseGui()
+
+                local plot = getMyPlot()
+                if plot then
+                    local slots = getSlots(plot)
+
+                    for _, slot in ipairs(slots) do
+                        for i = 1, 3 do
+                            upgrade(plot.Name, slot.Name)
+                        end
+                        task.wait(0.03)
+                    end
+                end
+
+                task.wait(0.25)
             end
         end)
     end
