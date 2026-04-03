@@ -477,6 +477,60 @@ local function createInfoBox(title, desc, tab, isButton, linkToCopy)
     table.insert(options[tab], Container)
 end
 
+-- ===== TELEPORT TO RESPAWN BUTTON =====
+local function createTeleportToRespawnButton()
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(0.95, 0, 0, 50)
+    Container.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    Container.Visible = (activeTab == "Main")
+    Container.Parent = MainContent
+    Container.Name = "Teleport to Respawn"
+    Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 10)
+
+    local ContainerStroke = Instance.new("UIStroke")
+    ContainerStroke.Color = Color3.fromRGB(30, 30, 30)
+    ContainerStroke.Thickness = 2
+    ContainerStroke.Parent = Container
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, 0, 1, 0)
+    Label.Text = "Teleport to Respawn"
+    Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Label.BackgroundTransparency = 1
+    Label.TextXAlignment = Enum.TextXAlignment.Center
+    Label.TextYAlignment = Enum.TextYAlignment.Center
+    Label.Font = Enum.Font.SourceSans
+    Label.TextSize = 16
+    Label.Parent = Container
+
+    local ClickBtn = Instance.new("TextButton")
+    ClickBtn.Size = UDim2.new(1, 0, 1, 0)
+    ClickBtn.BackgroundTransparency = 1
+    ClickBtn.Text = ""
+    ClickBtn.Parent = Container
+    ClickBtn.AutoButtonColor = false
+
+    local function teleportToRespawn()
+        if createDebounce("TeleportToRespawn", 0.1) then
+            pcall(function()
+                local RespawnPart = workspace:FindFirstChild("RespawnPart")
+                if RespawnPart then
+                    local char = Player.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        char.HumanoidRootPart.CFrame = RespawnPart.CFrame
+                    end
+                end
+            end)
+        end
+    end
+
+    ClickBtn.Activated:Connect(teleportToRespawn)
+
+    table.insert(options["Main"], Container)
+end
+
+createTeleportToRespawnButton()
+
 local isAutoRebirth = createOption("Auto Rebirth", false, "Main", function(active)
     if active then
         task.spawn(function()
@@ -558,6 +612,144 @@ local isAutoRebirth = createOption("Auto Rebirth", false, "Main", function(activ
     end
 end)
 
+local isAutoCollectMoney = createOption("Auto Collect Money", false, "Main", function(active)
+    if active then
+        task.spawn(function()
+            local Plots = workspace:WaitForChild("Plots")
+            local CollectRemote = ReplicatedStorage:WaitForChild("Events"):WaitForChild("CollectEarnings")
+            
+            while optionStates["Auto Collect Money"] do
+                task.wait(0.15)
+                pcall(function()
+                    for _, plot in ipairs(Plots:GetChildren()) do
+                        if plot:GetAttribute("Owner") == Player.UserId then
+                            local PlotSlots = plot:FindFirstChild("PlotSlots")
+                            if PlotSlots then
+                                for _, slot in ipairs(PlotSlots:GetChildren()) do
+                                    if slot:IsA("Model") then
+                                        local cash = slot:FindFirstChild("CashOut")
+                                        if cash and cash:IsA("BasePart") then
+                                            pcall(function()
+                                                CollectRemote:FireServer(plot.Name, slot.Name)
+                                                if type(firetouchinterest) == "function" then
+                                                    firetouchinterest(Player.Character.HumanoidRootPart, cash, 0)
+                                                    firetouchinterest(Player.Character.HumanoidRootPart, cash, 1)
+                                                end
+                                            end)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end)
+    end
+end)
+
+local isAutoUpgradeBrainrots = createOption("Auto Upgrade Brainrots", false, "Main", function(active)
+    if active then
+        task.spawn(function()
+            local Plots = workspace:WaitForChild("Plots")
+            local UpgradeRemote = ReplicatedStorage:WaitForChild("Events"):WaitForChild("UpgradeBrainrot")
+            local upgradeCooldown = {}
+            
+            while optionStates["Auto Upgrade Brainrots"] do
+                task.wait(0.2)
+                pcall(function()
+                    local function getCash()
+                        local stats = Player:FindFirstChild("leaderstats")
+                        if stats then
+                            local cash = stats:FindFirstChild("Cash")
+                            if cash then return cash.Value end
+                        end
+                        return 0
+                    end
+                    
+                    local function safeNumber(text)
+                        if not text then return 0 end
+                        text = tostring(text):gsub("[^%d.]", "")
+                        if text == "" then return 0 end
+                        return tonumber(text) or 0
+                    end
+                    
+                    for _, plot in ipairs(Plots:GetChildren()) do
+                        if plot:GetAttribute("Owner") == Player.UserId then
+                            local PlotSlots = plot:FindFirstChild("PlotSlots")
+                            if PlotSlots then
+                                for _, slot in ipairs(PlotSlots:GetChildren()) do
+                                    if slot:IsA("Model") then
+                                        local UpgradePart = slot:FindFirstChild("UpgradePart")
+                                        if UpgradePart then
+                                            local SurfaceGui = UpgradePart:FindFirstChild("UpgradeSurfaceGui")
+                                            if SurfaceGui then
+                                                local TextLabel = SurfaceGui:FindFirstChild("TextLabel", true)
+                                                if TextLabel and TextLabel.Text then
+                                                    local price = safeNumber(TextLabel.Text)
+                                                    local cash = getCash()
+                                                    
+                                                    if price > 0 and cash >= price then
+                                                        if not upgradeCooldown[slot] or tick() - upgradeCooldown[slot] >= 0.5 then
+                                                            upgradeCooldown[slot] = tick()
+                                                            
+                                                            pcall(function()
+                                                                UpgradeRemote:FireServer(plot.Name, slot.Name)
+                                                            end)
+                                                        end
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end)
+    end
+end)
+
+-- ===== PLAYER ESP (Red Aura) - Movido para o final da Main =====
+local isPlayerESP = createOption("Player ESP (Red Aura)", false, "Main")
+
+task.spawn(function()
+    while task.wait(1) do
+        if isPlayerESP() then
+            for _, p in pairs(game.Players:GetPlayers()) do
+                if p ~= Player then
+                    local char = p.Character
+                    if char then
+                        local highlight = char:FindFirstChild("PhantomESP")
+                        if not highlight then
+                            highlight = Instance.new("Highlight")
+                            highlight.Name = "PhantomESP"
+                            highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                            highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
+                            highlight.FillTransparency = 0.5
+                            highlight.Parent = char
+                        end
+                    end
+                end
+            end
+        else
+            for _, p in pairs(game.Players:GetPlayers()) do
+                if p ~= Player then
+                    local char = p.Character
+                    if char then
+                        local highlight = char:FindFirstChild("PhantomESP")
+                        if highlight then
+                            highlight:Destroy()
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
 createActionButton("Auto Rejoin", "Config", function()
     TeleportService:Teleport(game.PlaceId)
 end)
@@ -629,36 +821,87 @@ local isAutoCarry = createOption("Auto Carry", false, "Buy", function(active)
 end)
 
 local farmDebounce = {}
+local farmLock = false
 
-local blackListNames = {["SellPrompt"] = true, ["GrabPrompt"] = true, ["PlacePrompt"] = true, ["AddPrompt"] = true, ["DeleteAllPrompt"] = true, ["DeletePrompt"] = true, ["StealPrompt"] = true, ["GiftPrompt"] = true, ["OpenPrompt"] = true}
+local function findPickupPrompt()
+    local ActiveLuckyBlocks = workspace:FindFirstChild("ActiveLuckyBlocks")
+    if not ActiveLuckyBlocks then return nil end
+    
+    for _, entity in pairs(ActiveLuckyBlocks:GetChildren()) do
+        if entity.Name == "GroundEntity" then
+            local root = entity:FindFirstChild("Root")
+            if root then
+                local pickupPrompt = root:FindFirstChild("PickupPrompt")
+                if pickupPrompt then
+                    return pickupPrompt
+                end
+            end
+        end
+    end
+    
+    return nil
+end
 
-local function fireAllProximityPrompts(distanceCheck)
-    local char = Player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+local function activatePickupPrompt(prompt)
+    if not prompt or not prompt.Parent then return false end
     
-    local root = char.HumanoidRootPart
+    for i = 1, 3 do
+        pcall(function()
+            if type(fireproximityprompt) == "function" then
+                fireproximityprompt(prompt, 0)
+            end
+        end)
+        
+        pcall(function()
+            if prompt:IsA("ProximityPrompt") then
+                prompt.HoldDuration = 0
+                prompt:InputHoldBegin()
+                prompt:InputHoldEnd()
+            end
+        end)
+        
+        task.wait(0.015)
+    end
     
-    pcall(function()
-        for _, prompt in pairs(workspace:GetDescendants()) do
-            if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-                if not blackListNames[prompt.Name] then
-                    local part = prompt.Parent
-                    local model = part and part:FindFirstAncestorOfClass("Model")
-                    local isMerchant = model and (model.Name == "IngredientsMerchant" or model.Name == "RobuxMerchant")
-                    
-                    if part and part:IsA("BasePart") and not isMerchant then
-                        if distanceCheck then
-                            if (root.Position - part.Position).Magnitude <= prompt.MaxActivationDistance then
-                                fireproximityprompt(prompt)
-                            end
-                        else
-                            fireproximityprompt(prompt)
-                        end
+    return true
+end
+
+local function forceNearbyPrompts(root)
+    for _, prompt in pairs(workspace:GetDescendants()) do
+        if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+            local part = prompt.Parent
+            if part and part:IsA("BasePart") then
+                if (root.Position - part.Position).Magnitude <= prompt.MaxActivationDistance then
+                    pcall(function()
+                        fireproximityprompt(prompt, 0)
+                    end)
+                end
+            end
+        end
+    end
+end
+
+local function findTargetByRarity(rarity)
+    local ClientBrainrotVisuals = workspace:FindFirstChild("ClientBrainrotVisuals")
+    if not ClientBrainrotVisuals then return nil end
+    
+    for _, model in pairs(ClientBrainrotVisuals:GetChildren()) do
+        if model.Name == "ClientVisual" then
+            local gui = model:FindFirstChild("LocalStatsGui")
+            local frame = gui and gui:FindFirstChild("Frame")
+            local rarityLabel = frame and frame:FindFirstChild("CharRarity")
+            
+            if rarityLabel and rarityLabel.Text == rarity then
+                for _, child in pairs(model:GetChildren()) do
+                    if child:IsA("MeshPart") then
+                        return child
                     end
                 end
             end
         end
-    end)
+    end
+    
+    return nil
 end
 
 local function createFarmOption(name, rarity)
@@ -668,105 +911,79 @@ local function createFarmOption(name, rarity)
             farmDebounce[name] = true
             
             task.spawn(function()
-                local firstRun = true
+                local reachedArea = false
                 
                 while optionStates[name] do
-                    if not optionStates[name] then break end
-                    
                     pcall(function()
                         local char = Player.Character
                         if not char or not char:FindFirstChild("HumanoidRootPart") then 
-                            task.wait(0.5)
+                            task.wait(0.2)
                             return 
                         end
                         
+                        local root = char.HumanoidRootPart
                         local Area = workspace:FindFirstChild("Area")
                         local Piece3 = Area and Area:FindFirstChild("3")
                         local Piece6 = Area and Area:FindFirstChild("6")
                         local RespawnPart = workspace:FindFirstChild("RespawnPart")
                         
-                        if not Piece3 or not Piece6 or not RespawnPart then 
-                            task.wait(1)
-                            return 
+                        if not reachedArea then
+                            if Piece3 then
+                                root.CFrame = Piece3.CFrame
+                                task.wait(0.3)
+                            end
+                            
+                            if Piece6 then
+                                root.CFrame = Piece6.CFrame
+                                task.wait(0.3)
+                            end
+                            
+                            reachedArea = true
                         end
                         
-                        if firstRun then
-                            char.HumanoidRootPart.CFrame = Piece3.CFrame
-                            task.wait(0.3)
-                            firstRun = false
-                        end
-                        
-                        if not optionStates[name] then return end
-                        
-                        char.HumanoidRootPart.CFrame = Piece6.CFrame
-                        task.wait(0.8)
-                        
-                        if not optionStates[name] then return end
-                        
-                        local ClientBrainrotVisuals = workspace:FindFirstChild("ClientBrainrotVisuals")
-                        if not ClientBrainrotVisuals then
-                            task.wait(1)
+                        if farmLock then
+                            task.wait(0.05)
                             return
                         end
                         
-                        local targetMeshPart = nil
+                        local target = findTargetByRarity(rarity)
                         
-                        for _, model in pairs(ClientBrainrotVisuals:GetChildren()) do
-                            if not optionStates[name] then break end
+                        if target then
+                            farmLock = true
                             
-                            if model.Name == "ClientVisual" then
-                                local gui = model:FindFirstChild("LocalStatsGui")
-                                if gui then
-                                    local frame = gui:FindFirstChild("Frame")
-                                    if frame then
-                                        local charRarity = frame:FindFirstChild("CharRarity")
-                                        if charRarity and charRarity:IsA("TextLabel") then
-                                            if charRarity.Text == rarity then
-                                                for _, child in pairs(model:GetChildren()) do
-                                                    if child:IsA("MeshPart") then
-                                                        targetMeshPart = child
-                                                        break
-                                                    end
-                                                end
-                                                break
-                                            end
-                                        end
-                                    end
+                            local root2 = Player.Character.HumanoidRootPart
+                            root2.CFrame = target.CFrame + Vector3.new(0, 3, 0)
+                            task.wait(0.12)
+                            
+                            for i = 1, 8 do
+                                local pickupPrompt = findPickupPrompt()
+                                
+                                if not pickupPrompt then
+                                    break
                                 end
+                                
+                                activatePickupPrompt(pickupPrompt)
+                                forceNearbyPrompts(root2)
+                                
+                                task.wait(0.02)
                             end
-                        end
-                        
-                        if targetMeshPart then
-                            local charCheck = Player.Character
-                            if charCheck and charCheck:FindFirstChild("HumanoidRootPart") then
-                                charCheck.HumanoidRootPart.CFrame = targetMeshPart.CFrame + Vector3.new(0, 3, 0)
-                                task.wait(0.4)
-                                
-                                if not optionStates[name] then return end
-                                
-                                for attemptLoop = 1, 10 do
-                                    if not optionStates[name] then break end
-                                    fireAllProximityPrompts(true)
-                                    task.wait(0.12)
-                                end
-                                
-                                task.wait(0.3)
-                                
-                                local charFinal = Player.Character
-                                if charFinal and charFinal:FindFirstChild("HumanoidRootPart") then
-                                    charFinal.HumanoidRootPart.CFrame = RespawnPart.CFrame + Vector3.new(0, 3, 0)
-                                end
-                                
-                                task.wait(1)
+                            
+                            task.wait(0.03)
+                            
+                            if RespawnPart then
+                                Player.Character.HumanoidRootPart.CFrame = RespawnPart.CFrame + Vector3.new(0, 3, 0)
                             end
+                            
+                            task.wait(0.5)
+                            
+                            reachedArea = false
+                            farmLock = false
                         else
-                            task.wait(1.5)
+                            task.wait(0.05)
                         end
                     end)
                     
-                    if optionStates[name] then
-                        task.wait(0.1)
-                    end
+                    task.wait(0.08)
                 end
                 
                 farmDebounce[name] = false
@@ -780,116 +997,6 @@ end
 local isAutoCelestial = createFarmOption("Auto Celestial", "Celestial")
 local isAutoSecret = createFarmOption("Auto Secret", "Secret")
 local isAutoInfinity = createFarmOption("Auto Infinity", "Infinity")
-
-local indexDebounce = {}
-local indexPanelOpen = {}
-
-local function createIndexOption()
-    return createOption("Auto Index [Click]", false, "Farm", function(active)
-        if active then
-            if indexDebounce["AutoIndex"] then return end
-            indexDebounce["AutoIndex"] = true
-            
-            task.spawn(function()
-                while optionStates["Auto Index [Click]"] do
-                    if not optionStates["Auto Index [Click]"] then break end
-                    
-                    pcall(function()
-                        local char = Player.Character
-                        if not char or not char:FindFirstChild("HumanoidRootPart") then 
-                            task.wait(0.5)
-                            return 
-                        end
-                        
-                        local RespawnPart = workspace:FindFirstChild("RespawnPart")
-                        if not RespawnPart then
-                            task.wait(1)
-                            return
-                        end
-                        
-                        for areaNum = 1, 7 do
-                            if not optionStates["Auto Index [Click]"] then break end
-                            
-                            local Area = workspace:FindFirstChild("Area")
-                            local AreaPiece = Area and Area:FindFirstChild(tostring(areaNum))
-                            
-                            if AreaPiece then
-                                char.HumanoidRootPart.CFrame = AreaPiece.CFrame
-                                task.wait(0.6)
-                                
-                                if not optionStates["Auto Index [Click]"] then return end
-                                
-                                local ClientBrainrotVisuals = workspace:FindFirstChild("ClientBrainrotVisuals")
-                                if not ClientBrainrotVisuals then
-                                    task.wait(0.5)
-                                    continue
-                                end
-                                
-                                local targetMeshPart = nil
-                                
-                                for _, model in pairs(ClientBrainrotVisuals:GetChildren()) do
-                                    if not optionStates["Auto Index [Click]"] then break end
-                                    
-                                    if model.Name == "ClientVisual" then
-                                        local gui = model:FindFirstChild("LocalStatsGui")
-                                        if gui then
-                                            local frame = gui:FindFirstChild("Frame")
-                                            if frame then
-                                                local charRarity = frame:FindFirstChild("CharRarity")
-                                                if charRarity and charRarity:IsA("TextLabel") then
-                                                    for _, child in pairs(model:GetChildren()) do
-                                                        if child:IsA("MeshPart") then
-                                                            targetMeshPart = child
-                                                            break
-                                                        end
-                                                    end
-                                                    break
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                                
-                                if targetMeshPart then
-                                    local charCheck = Player.Character
-                                    if charCheck and charCheck:FindFirstChild("HumanoidRootPart") then
-                                        charCheck.HumanoidRootPart.CFrame = targetMeshPart.CFrame + Vector3.new(0, 3, 0)
-                                        task.wait(0.4)
-                                        
-                                        if not optionStates["Auto Index [Click]"] then return end
-                                        
-                                        for attemptLoop = 1, 10 do
-                                            if not optionStates["Auto Index [Click]"] then break end
-                                            fireAllProximityPrompts(true)
-                                            task.wait(0.12)
-                                        end
-                                        
-                                        task.wait(0.3)
-                                        
-                                        local charFinal = Player.Character
-                                        if charFinal and charFinal:FindFirstChild("HumanoidRootPart") then
-                                            charFinal.HumanoidRootPart.CFrame = RespawnPart.CFrame + Vector3.new(0, 3, 0)
-                                        end
-                                        
-                                        task.wait(0.8)
-                                    end
-                                end
-                            end
-                        end
-                        
-                        task.wait(1)
-                    end)
-                end
-                
-                indexDebounce["AutoIndex"] = false
-            end)
-        else
-            indexDebounce["AutoIndex"] = false
-        end
-    end)
-end
-
-local isAutoIndex = createIndexOption()
 
 local isInfiniteJump = createOption("Infinite Jump", false, "Config")
 
@@ -1202,12 +1309,6 @@ function showTab(tabName)
         end
     end
     repositionElements(tabName)
-    
-    if tabName ~= "Farm" then
-        for key, _ in pairs(indexPanelOpen) do
-            indexPanelOpen[key] = false
-        end
-    end
 end
 
 TabMain.Activated:Connect(function() showTab("Main") end)
